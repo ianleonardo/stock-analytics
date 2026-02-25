@@ -212,3 +212,6 @@ __marimo__/
 
 # Node
 node_modules/
+
+# macOS
+.DS_Store
