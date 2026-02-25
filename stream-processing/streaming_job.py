@@ -14,7 +14,7 @@ from pyspark.sql.types import (
     StructType, StructField, StringType, DoubleType, LongType,
 )
 from pyspark.sql.functions import col, from_json, from_unixtime, window, sum as spark_sum, stddev, mean
-from pyspark.sql.streaming import GroupState, GroupStateTimeout
+from pyspark.sql.streaming.state import GroupState, GroupStateTimeout
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -213,7 +213,6 @@ def _metrics_stateful(
 def _compute_and_write_alerts(batch_df, batch_id):
     """From a batch of trades, compute 1m volume and 10m avg per symbol; emit alerts if vol_1m > 2*avg_10m."""
     import pandas as pd
-    from confluent_kafka import Producer
 
     rows = batch_df.collect()
     if not rows:
@@ -267,7 +266,8 @@ def _compute_and_write_alerts(batch_df, batch_id):
 
     # Optionally produce to trades-alerts (Kafka)
     try:
-        prod = Producer({"bootstrap.servers": KAFKA_BOOTSTRAP})
+        from kafka import KafkaProducer
+        prod = KafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP)
         for _, row in alerts_df.iterrows():
             msg = json.dumps({
                 "ticker": row["symbol"],
@@ -275,10 +275,10 @@ def _compute_and_write_alerts(batch_df, batch_id):
                 "severity": "high",
                 "value": float(row["vol_1m"] / row["avg_vol_10m"]) if row["avg_vol_10m"] else 0,
                 "ts": row["window_1m"].isoformat(),
-            })
-            prod.produce(TRADES_ALERTS_TOPIC, key=row["symbol"].encode(), value=msg.encode())
-            prod.poll(0)
+            }).encode()
+            prod.send(TRADES_ALERTS_TOPIC, key=row["symbol"].encode(), value=msg)
         prod.flush()
+        prod.close()
     except Exception as e:
         logger.warning("Kafka alert produce failed: %s", e)
 

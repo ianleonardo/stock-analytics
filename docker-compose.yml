@@ -133,6 +133,27 @@ services:
     depends_on:
       - api
 
+  stream-processing:
+    build: ./stream-processing
+    container_name: stream-processing
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      PG_HOST: postgres
+      PG_PORT: "5432"
+      PG_DATABASE: stock_analytics
+      PG_USER: stock
+      PG_PASSWORD: stock
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
   # Optional: Airflow for Phase 5
   # airflow:
   #   image: apache/airflow:2.7
